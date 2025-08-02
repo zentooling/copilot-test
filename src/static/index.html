@@ -46,5 +46,120 @@
     </footer>
 
     <script src="app.js"></script>
+
+
+    <script>
+      // --- Utility to render a single activity card ---
+      function renderActivityCard(name, info) {
+        return `
+          <h4>${name}</h4>
+          <p>${info.description}</p>
+          <p><strong>Schedule:</strong> ${info.schedule}</p>
+          <p><strong>Max Participants:</strong> ${info.max_participants}</p>
+          <div class="participants-section">
+            <strong>Participants:</strong>
+            <ul class="participants-list" data-activity="${name}">
+              ${
+                info.participants.length
+                  ? info.participants.map((email) => `<li>${email}</li>`).join("")
+                  : '<li class="no-participants">No participants yet</li>'
+              }
+            </ul>
+          </div>
+        `;
+      }
+
+      // --- Load and render all activities ---
+      let activitiesData = {};
+      function loadActivities() {
+        fetch("/activities")
+          .then((res) => res.json())
+          .then((data) => {
+            activitiesData = data;
+            const activitiesList = document.getElementById("activities-list");
+            activitiesList.innerHTML = "";
+            Object.entries(data).forEach(([name, info]) => {
+              const card = document.createElement("div");
+              card.className = "activity-card";
+              card.setAttribute("data-activity", name);
+              card.innerHTML = renderActivityCard(name, info);
+              activitiesList.appendChild(card);
+            });
+            // Also update the activity select dropdown
+            const select = document.getElementById("activity");
+            if (select) {
+              const current = select.value;
+              select.innerHTML = '<option value="">-- Select an activity --</option>';
+              Object.keys(data).forEach((name) => {
+                const opt = document.createElement("option");
+                opt.value = name;
+                opt.textContent = name;
+                select.appendChild(opt);
+              });
+              select.value = current;
+            }
+          });
+      }
+
+
+
+      // spurious comment
+
+      // --- Update only the participants list for a given activity ---
+      function updateParticipantsList(activityName, participants) {
+        const list = document.querySelector(`.participants-list[data-activity="${activityName}"]`);
+        if (list) {
+          if (participants.length) {
+            list.innerHTML = participants.map((email) => `<li>${email}</li>`).join("");
+          } else {
+            list.innerHTML = '<li class="no-participants">No participants yet</li>';
+          }
+        }
+      }
+
+      // --- Initial load ---
+      document.addEventListener("DOMContentLoaded", loadActivities);
+
+      // --- Signup form handler ---
+      document.getElementById("signup-form").addEventListener("submit", function (e) {
+        e.preventDefault();
+        const email = document.getElementById("email").value.trim();
+        const activity = document.getElementById("activity").value;
+        const messageDiv = document.getElementById("message");
+        messageDiv.className = "message hidden";
+        messageDiv.textContent = "";
+
+        if (!email || !activity) return;
+
+        fetch(`/activities/${encodeURIComponent(activity)}/signup`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ email })
+        })
+          .then(async (res) => {
+            if (!res.ok) {
+              const data = await res.json();
+              throw new Error(data.detail || "Signup failed");
+            }
+            return res.json();
+          })
+          .then(() => {
+            // Update local data and participants list in the UI
+            if (activitiesData[activity]) {
+              activitiesData[activity].participants.push(email);
+              updateParticipantsList(activity, activitiesData[activity].participants);
+            }
+            messageDiv.className = "message success";
+            messageDiv.textContent = `Successfully signed up for ${activity}!`;
+            this.reset();
+          })
+          .catch((err) => {
+            messageDiv.className = "message error";
+            messageDiv.textContent = err.message;
+          });
+      });
+    </script>
   </body>
 </html>
